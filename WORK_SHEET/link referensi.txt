@@ -1,0 +1,2 @@
+- https://stackoverflow.com/questions/45437924/drop-and-create-enum-with-sequelize-correctly
+- https://stackoverflow.com/questions/69783211/sequelize-how-do-you-format-date-to-yyyy-mm-dd-hhmmss-and-keep-the-columns-as
