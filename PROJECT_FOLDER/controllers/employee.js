@@ -1,5 +1,6 @@
 const db = require('../models/index')
 const Employee = db.Employee;
+const { QueryTypes } = require('sequelize')
 
 async function insertEmployeeData(req, res) {
     const existNik = await findEmployeeByNik(req.body.employee.nik);
@@ -279,48 +280,59 @@ async function updateEmployeeData(req, res) {
 async function getReportAllEmployee(req, res) {
     console.log("reports");
     try {
-        const employees = await Employee.findAll({
-            attributes: [
-                'id',
-                'nik',
-                'name',
-                'is_active',
-                [db.sequelize.fn('STRING_AGG', db.sequelize.col('family_data'), ' & '), 'keterangan']
-            ],
-            include: [
-                {
-                    model: db.EmployeeProfile,
-                    as: "profile",
-                    attributes: ['gender', [db.sequelize.fn('AGE', db.sequelize.col('profile.date_of_birth')), 'age']],
-                },
-                {
-                    model: db.EmployeeFamily,
-                    as: 'family',
-                    attributes: [
-                        [
-                            db.sequelize.literal("CONCAT(COUNT(*), ' ', relation_status)"), '&',
-                            'family_data',
-                        ],
-                    ],
-                    group: ['family.employee_id', 'family.relation_status'],
-                },
-                {
-                    model: db.Education,
-                    as: "education",
-                    attributes: [
-                        [
-                            db.sequelize.literal(`STRING_AGG("education"."name", ', ')`),
-                            'school_name',
-                        ],
-                        [
-                            db.sequelize.literal(`STRING_AGG("education"."level"::text, ', ')`),
-                            'levels',
-                        ],
-                    ],
-                    group: ['education.employee_id'],
-                },
-            ],
-        });
+        const employees = await db.sequelize.query(`select
+        e.id as employee_id,
+        e.nik ,
+        e."name" ,
+        e.is_active ,
+        ep.gender,
+        CONCAT(DATE_PART('year',
+        AGE(NOW(),
+        ep.date_of_birth)),
+        ' Years Old') as age,
+        ed.school_name,
+        ed.levels,
+        coalesce (ef.keterangan,
+        '-') as family_data
+    from
+        employee e
+    left join employee_profile ep on
+        ep.employee_id = e.id
+    left join (
+        select
+            employee_id,
+            STRING_AGG(relation_status_count,
+            ' & ') as keterangan
+        from
+            (
+            select
+                ef.employee_id,
+                CONCAT(COUNT(*),
+                ' ',
+                ef.relation_status) as relation_status_count
+            from
+                employee_family ef
+            group by
+                ef.employee_id,
+                ef.relation_status
+    ) as ef_subquery
+        group by
+            employee_id
+    ) ef on
+        ef.employee_id = e.id
+    left join (
+        select
+            ee.employee_id ,
+            STRING_AGG(ee."name",
+            ', ') as school_name,
+            STRING_AGG(ee."level"::text,
+            ', ') as levels
+        from
+            public.employee_education ee
+        group by
+            ee.employee_id 
+    ) ed on
+        ed.employee_id = e.id`, { type: QueryTypes.SELECT });
 
         return res.status(200).json({ employees: employees })
     } catch (error) {
